@@ -1,7 +1,7 @@
 """Power sensors: measured by the Plug Plus, estimated for lamps.
 
-The plug reports voltage and power itself; its energy is the integral of those
-measurements. Lamps have no meter, so their values are an estimate from the
+The plug reports voltage, power and an energy counter itself. Lamps have no
+meter, so their values are an estimate from the
 rated wattage and brightness and are named "(estimated)".
 """
 
@@ -100,12 +100,15 @@ class _PlugSensor(_Sensor):
         await super().async_added_to_hass()
         self.async_on_remove(self._mesh.subscribe_plug(self._device.mesh_id, self._handle_measurement))
 
-    @callback
-    def _handle_measurement(self, measurement: p.PlugMeasurement) -> None:
-        self._apply_measurement(measurement)
-        self.async_write_ha_state()
+    _reading: type = p.PlugMeasurement
 
-    def _apply_measurement(self, measurement: p.PlugMeasurement) -> None:
+    @callback
+    def _handle_measurement(self, measurement: p.PlugMeasurement | p.PlugEnergy) -> None:
+        if isinstance(measurement, self._reading):
+            self._apply_measurement(measurement)
+            self.async_write_ha_state()
+
+    def _apply_measurement(self, measurement) -> None:
         raise NotImplementedError
 
     def _apply_status(self, status: p.LightStatus) -> None:
@@ -130,11 +133,14 @@ class PlugVoltage(_PlugSensor):
         self._attr_native_value = measurement.voltage
 
 
-class PlugEnergy(_EnergySensor, _PlugSensor):
-    _key = "energy"
+class PlugEnergy(_EnergyMixin, _PlugSensor):
+    """The plug's own energy counter (may reset daily; total_increasing handles that)."""
 
-    def _apply_measurement(self, measurement: p.PlugMeasurement) -> None:
-        self._record(measurement.power)
+    _key = "energy"
+    _reading = p.PlugEnergy
+
+    def _apply_measurement(self, measurement: p.PlugEnergy) -> None:
+        self._attr_native_value = measurement.kwh
 
 
 # ---- Lamps (estimated) ---------------------------------------------------

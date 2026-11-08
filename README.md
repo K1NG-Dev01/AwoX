@@ -53,7 +53,7 @@ AwoX nodes never acknowledge the notification subscription that BlueZ sends, so 
 
 - Through an ESPHome Bluetooth proxy, status reports may not work reliably (see above); switching still does.
 - Pairing new lamps, firmware updates and the mesh itself are managed in the AwoX / EGLO app.
-- The Plug Plus energy is summed up from the measured power (every 15 s); the plug's internal meter reading is not read yet.
+- The Plug Plus energy counter is read from the plug itself (0.1 Wh resolution). Whether it resets daily is still unknown; the energy dashboard handles both cases.
 
 ## Troubleshooting
 

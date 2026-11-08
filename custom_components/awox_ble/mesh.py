@@ -2,7 +2,8 @@
 
 One lamp with good signal acts as the entry point; commands for every device
 are sent through it. If it goes away (e.g. switched off at the wall) the next
-best lamp takes over. The Plug Plus is never used: it is the Alexa bridge.
+best lamp takes over. A lamp that stays connected but stops forwarding mesh
+traffic is replaced as well. The Plug Plus is never used: it is the Alexa bridge.
 """
 
 from __future__ import annotations
@@ -42,6 +43,9 @@ VERIFY_TIMEOUT = 1.5
 RETRY_DELAYS = (2, 5, 10, 30, 60)
 FAILED_PENALTY = 60.0
 STALE_AFTER = 20.0  # seconds without an advertisement: probably powered off
+# Connected, but no packet from any other device for this long: the entry lamp
+# has stopped relaying (seen 2026-11-08). Status poll 60 s, plug poll 15 s.
+RELAY_TIMEOUT = 150.0
 NEVER = datetime(1970, 1, 1, tzinfo=UTC)
 
 Connector = Callable[[BLEDevice, Callable[[BleakClient], None]], Awaitable[Any]]
@@ -102,10 +106,11 @@ class AwoxMesh:
         self._power_gen: dict[int, int] = {}
         self._silent: set[str] = set()
         self._warned = False
+        self._relayed_at = 0.0
 
         self._unsub_plug_poll: CALLBACK_TYPE | None = None
         self._plugs = [d.mesh_id for d in devices if p.capabilities(d.type).kind == "plug"]
-        self._plug_listeners: dict[int, list[Callable[[p.PlugMeasurement], None]]] = {}
+        self._plug_listeners: dict[int, list[Callable[[p.PlugMeasurement | p.PlugEnergy], None]]] = {}
         self._listeners: dict[int, list[Callable[[p.LightStatus], None]]] = {}
         self._connection_listeners: list[Callable[[], None]] = []
         self._last_seen: dict[int, datetime] = {}
@@ -155,7 +160,7 @@ class AwoxMesh:
         self._listeners.setdefault(mesh_id, []).append(cb)
         return lambda: self._listeners[mesh_id].remove(cb)
 
-    def subscribe_plug(self, mesh_id: int, cb: Callable[[p.PlugMeasurement], None]) -> Callable[[], None]:
+    def subscribe_plug(self, mesh_id: int, cb: Callable[[p.PlugMeasurement | p.PlugEnergy], None]) -> Callable[[], None]:
         self._plug_listeners.setdefault(mesh_id, []).append(cb)
         return lambda: self._plug_listeners[mesh_id].remove(cb)
 
@@ -277,6 +282,7 @@ class AwoxMesh:
                 continue
 
             self._warned = False
+            self._relayed_at = asyncio.get_running_loop().time()
             self._failed_at.pop(mac, None)
             self._good.add(mac)
             if self._baseline is None:
@@ -407,6 +413,7 @@ class AwoxMesh:
         for mesh_id in self._plugs:
             try:
                 await self._write(mesh_id, p.request_plug_live())
+                await self._write(mesh_id, p.request_plug_energy())
             except HomeAssistantError:
                 return
 
@@ -414,10 +421,25 @@ class AwoxMesh:
         if self.connected:
             await self._request_plugs()
 
+    def _check_relay(self) -> None:
+        """Drop an entry lamp that stays connected but forwards nothing from the mesh."""
+        if len(self._devices) < 2 or asyncio.get_running_loop().time() - self._relayed_at < RELAY_TIMEOUT:
+            return
+        client, mac = self._client, self._entry_mac
+        _LOGGER.info("No answer from the mesh via %s; switching entry lamp", mac)
+        self._failed_at[mac] = asyncio.get_running_loop().time()
+        self._hass.async_create_task(self._safe_disconnect(client), eager_start=False)
+
     async def _async_poll(self, _now: datetime) -> None:
         if self.connected:
+            self._check_relay()
             await self._request_all()
         self._notify_connection()
+
+    def _heard_from(self, mesh_id: int) -> None:
+        self._last_seen[mesh_id] = dt_util.utcnow()
+        if mesh_id != self._mesh_ids.get(self._entry_mac or ""):
+            self._relayed_at = asyncio.get_running_loop().time()
 
     # ---- receiving -----------------------------------------------------
 
@@ -428,8 +450,8 @@ class AwoxMesh:
             return
         plain = p.decrypt_packet(key, mac, bytes(data))
         if plain and (measurement := p.parse_plug(plain)) and measurement.mesh_id in self._devices:
-            self._last_seen[measurement.mesh_id] = dt_util.utcnow()
-            _LOGGER.debug("Plug %d: %.1f V %.1f W", measurement.mesh_id, measurement.voltage, measurement.power)
+            self._heard_from(measurement.mesh_id)
+            _LOGGER.debug("Plug %d: %s", measurement.mesh_id, measurement)
             for cb in list(self._plug_listeners.get(measurement.mesh_id, ())):
                 cb(measurement)
             return
@@ -441,7 +463,7 @@ class AwoxMesh:
                 _LOGGER.debug("Ignoring mesh packet (%s)", "unknown device" if status else "unreadable")
             return
         _LOGGER.debug("Status from %d: on=%s raw=%s", status.mesh_id, status.on, plain[7:].hex())
-        self._last_seen[status.mesh_id] = dt_util.utcnow()
+        self._heard_from(status.mesh_id)
         self._latest[status.mesh_id] = (asyncio.get_running_loop().time(), status)
         if event := self._status_event.pop(status.mesh_id, None):
             event.set()

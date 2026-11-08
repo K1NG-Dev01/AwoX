@@ -267,9 +267,36 @@ def request_plug_live() -> Command:
     return C_PLUG_REQUEST, bytes([0x10, PLUG_LIVE])
 
 
-def parse_plug(data: bytes) -> PlugMeasurement | None:
+def _parse_live(data: bytes) -> PlugMeasurement | None:
     """Parse a decrypted 0xd8 live-data reply of the Plug Plus."""
     if len(data) < 15 or data[7] != C_PLUG_REPLY or data[8:10] != b"\x60\x01" or data[10] != PLUG_LIVE:
         return None
     voltage, watts = struct.unpack_from("<HH", data, 11)
     return PlugMeasurement(data[3] | data[4] << 8, voltage / 10, watts / 10)
+
+
+# Subtype 0x14 index 0: energy counter, u16 LE in 0.1 Wh (verified 2026-11-08:
+# +4.0 Wh in 84 s at ~174 W). It may reset daily; HA's total_increasing copes.
+PLUG_ENERGY = 0x14
+
+
+@dataclass(frozen=True)
+class PlugEnergy:
+    mesh_id: int
+    kwh: float
+
+
+def request_plug_energy() -> Command:
+    return C_PLUG_REQUEST, bytes([0x10, PLUG_ENERGY, 0x00])
+
+
+
+
+def parse_plug(data: bytes) -> PlugMeasurement | PlugEnergy | None:
+    """Parse a decrypted 0xd8 reply: live values or the energy counter."""
+    if len(data) >= 14 and data[7] == C_PLUG_REPLY and data[8:10] == b"\x60\x01" and data[10] == PLUG_ENERGY:
+        if data[11] != 0:
+            return None
+        (tenth_wh,) = struct.unpack_from("<H", data, 12)
+        return PlugEnergy(data[3] | data[4] << 8, round(tenth_wh / 10000, 4))
+    return _parse_live(data)

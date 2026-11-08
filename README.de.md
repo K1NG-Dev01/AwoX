@@ -53,7 +53,7 @@ AwoX-Lampen bestätigen die Benachrichtigungs-Anmeldung von BlueZ nie, BlueZ tre
 
 - Über einen ESPHome-Proxy kommen Statusmeldungen eventuell nicht zuverlässig an (siehe oben); Schalten funktioniert trotzdem.
 - Neue Lampen koppeln, Firmware-Updates und das Mesh selbst verwaltest du in der AwoX-/EGLO-App.
-- Die Energie des Plug Plus wird aus der gemessenen Leistung (alle 15 s) aufsummiert; der interne Zählerstand des Steckers wird noch nicht gelesen.
+- Der Energiezähler des Plug Plus wird direkt aus dem Stecker gelesen (0,1 Wh genau). Ob er sich täglich zurücksetzt, ist noch offen; das Energie-Dashboard rechnet in beiden Fällen richtig.
 
 ## Fehlersuche
 
