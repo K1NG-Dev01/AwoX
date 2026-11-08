@@ -1,0 +1,100 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "AwoX-/EGLO-Konto",
+        "description": "Melde dich einmal mit dem Konto aus der AwoX-HomeControl- oder EGLO-Connect-App an. Es wird nur genutzt, um die Mesh-Zugangsdaten und die Liste deiner Lampen abzuholen; danach werden die Lampen lokal per Bluetooth gesteuert. Dein Konto-Passwort wird nicht gespeichert.",
+        "data": {
+          "username": "E-Mail",
+          "password": "Passwort"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Erneut anmelden",
+        "description": "Die Lampen nehmen die gespeicherten Mesh-Zugangsdaten nicht mehr an (z. B. nach neuem Koppeln in der App). Melde dich erneut an, um die aktuellen abzuholen.",
+        "data": {
+          "username": "E-Mail",
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "E-Mail oder Passwort falsch.",
+      "cannot_connect": "Die AwoX-Cloud ist nicht erreichbar. Bitte später erneut versuchen.",
+      "no_devices": "In diesem Konto wurden keine Bluetooth-Mesh-Geräte gefunden."
+    },
+    "abort": {
+      "already_configured": "Dieses Mesh ist bereits eingerichtet.",
+      "reauth_successful": "Zugangsdaten aktualisiert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "menu_options": {
+          "preferred": "Einstiegslampe",
+          "rated_watts": "Nennleistung der Lampen",
+          "add_device": "Gerät per MAC-Adresse hinzufügen"
+        }
+      },
+      "preferred": {
+        "title": "Einstiegslampe",
+        "description": "Home Assistant verbindet sich mit einer Lampe und erreicht alle anderen über das Mesh. Standardmäßig wird die mit dem besten Signal gewählt.",
+        "data": {
+          "preferred_mac": "Einstiegslampe"
+        }
+      },
+      "rated_watts": {
+        "title": "Nennleistung der Lampen",
+        "description": "Leistung jeder Lampe bei voller Helligkeit in Watt (steht auf der Verpackung). Daraus werden Leistung und Energie (geschätzt) berechnet; die Steckdose misst selbst."
+      },
+      "add_device": {
+        "title": "Gerät hinzufügen",
+        "description": "Für ein Gerät, das in der Kontoliste fehlt. Die Mesh-ID steht in der App oder im Log.",
+        "data": {
+          "mac": "MAC-Adresse",
+          "mesh_id": "Mesh-ID",
+          "name": "Name"
+        }
+      }
+    },
+    "error": {
+      "invalid_mac": "Format: AA:BB:CC:DD:EE:FF.",
+      "already_added": "Dieses Gerät ist bereits Teil der Integration.",
+      "other_mesh": "Diese Lampe gehört zu einem anderen Mesh oder wird nicht unterstützt."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "power": { "name": "Leistung" },
+      "voltage": { "name": "Spannung" },
+      "energy": { "name": "Energie" },
+      "estimated_power": { "name": "Leistung (geschätzt)" },
+      "estimated_energy": { "name": "Energie (geschätzt)" }
+    },
+    "light": {
+      "awox_light": {
+        "state_attributes": {
+          "effect": {
+            "state": {
+              "rainbow": "Regenbogen",
+              "rainbow_2": "Regenbogen 2",
+              "colour_program_2": "Farbprogramm 2",
+              "colour_program_3": "Farbprogramm 3",
+              "colour_program_4": "Farbprogramm 4",
+              "colour_program_5": "Farbprogramm 5",
+              "colour_program_6": "Farbprogramm 6"
+            }
+          }
+        }
+      }
+    }
+  },
+  "selector": {
+    "preferred": {
+      "options": {
+        "auto": "Automatisch (bestes Signal)"
+      }
+    }
+  }
+}

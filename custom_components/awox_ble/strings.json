@@ -1,0 +1,100 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "AwoX / EGLO account",
+        "description": "Sign in once with the account you use in the AwoX HomeControl or EGLO Connect app. It is only used to download the mesh credentials and the list of your lamps; the lamps are then controlled locally over Bluetooth. Your account password is not stored.",
+        "data": {
+          "username": "E-mail",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Sign in again",
+        "description": "The lamps no longer accept the stored mesh credentials (for example after re-pairing them in the app). Sign in again to download the current ones.",
+        "data": {
+          "username": "E-mail",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Wrong e-mail or password.",
+      "cannot_connect": "Could not reach the AwoX cloud. Try again later.",
+      "no_devices": "No Bluetooth mesh devices were found in this account."
+    },
+    "abort": {
+      "already_configured": "This mesh is already set up.",
+      "reauth_successful": "Credentials updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "menu_options": {
+          "preferred": "Entry lamp",
+          "rated_watts": "Rated power of the lamps",
+          "add_device": "Add a device by MAC address"
+        }
+      },
+      "preferred": {
+        "title": "Entry lamp",
+        "description": "Home Assistant connects to one lamp and reaches all others through the mesh. By default it picks the one with the best signal.",
+        "data": {
+          "preferred_mac": "Entry lamp"
+        }
+      },
+      "rated_watts": {
+        "title": "Rated power of the lamps",
+        "description": "Power of each lamp at full brightness in watts (see the packaging). Used for the estimated power and energy; the plug measures itself."
+      },
+      "add_device": {
+        "title": "Add a device",
+        "description": "For a device that is missing from the account list. The mesh ID is shown in the app or in the logs.",
+        "data": {
+          "mac": "MAC address",
+          "mesh_id": "Mesh ID",
+          "name": "Name"
+        }
+      }
+    },
+    "error": {
+      "invalid_mac": "Use the format AA:BB:CC:DD:EE:FF.",
+      "already_added": "This device is already part of the integration.",
+      "other_mesh": "This device belongs to a different mesh or is not supported."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "power": { "name": "Power" },
+      "voltage": { "name": "Voltage" },
+      "energy": { "name": "Energy" },
+      "estimated_power": { "name": "Power (estimated)" },
+      "estimated_energy": { "name": "Energy (estimated)" }
+    },
+    "light": {
+      "awox_light": {
+        "state_attributes": {
+          "effect": {
+            "state": {
+              "rainbow": "Rainbow",
+              "rainbow_2": "Rainbow 2",
+              "colour_program_2": "Colour program 2",
+              "colour_program_3": "Colour program 3",
+              "colour_program_4": "Colour program 4",
+              "colour_program_5": "Colour program 5",
+              "colour_program_6": "Colour program 6"
+            }
+          }
+        }
+      }
+    }
+  },
+  "selector": {
+    "preferred": {
+      "options": {
+        "auto": "Automatic (best signal)"
+      }
+    }
+  }
+}

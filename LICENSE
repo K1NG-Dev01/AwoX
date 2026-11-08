@@ -1,0 +1,53 @@
+AvoX K1NG Dev – Home Assistant integration
+Copyright (c) 2026 Henrik. Alle Rechte vorbehalten. / All rights reserved.
+
+DEUTSCH
+
+1. Erlaubt: Du darfst diese Software kostenlos herunterladen, in deiner eigenen
+   Home-Assistant-Installation installieren und für private Zwecke benutzen.
+2. Nicht erlaubt ohne vorherige schriftliche Zustimmung des Rechteinhabers:
+   - die Software oder Teile davon zu kopieren (außer für die Installation nach
+     Punkt 1), zu verändern oder darauf aufbauende Werke zu erstellen,
+   - sie weiterzugeben, zu veröffentlichen, zu verkaufen oder anderen zum
+     Herunterladen anzubieten,
+   - sie unter eigenem Namen oder in eigenen Projekten zu verwenden.
+3. Die Software wird ohne jede Gewährleistung bereitgestellt. Der Rechteinhaber
+   haftet nicht für Schäden aus ihrer Nutzung, soweit gesetzlich zulässig.
+
+ENGLISH
+
+1. Permitted: you may download this software free of charge, install it in your
+   own Home Assistant installation and use it for private purposes.
+2. Not permitted without prior written consent of the copyright holder:
+   - copying the software or parts of it (except for installation under
+     point 1), modifying it or creating derivative works,
+   - redistributing, publishing, selling or offering it for download,
+   - using it under your own name or in your own projects.
+3. The software is provided "as is", without warranty of any kind. To the extent
+   permitted by law, the copyright holder is not liable for any damages arising
+   from its use.
+
+THIRD-PARTY NOTICE
+
+The Telink mesh packet layout and crypto in custom_components/awox_ble/protocol.py
+follow fsaris/home-assistant-awox (https://github.com/fsaris/home-assistant-awox),
+which builds on Leiaz/python-awox-mesh-light. Those parts remain under the MIT
+License of their authors:
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
