@@ -107,6 +107,9 @@ class AwoxMesh:
         self._silent: set[str] = set()
         self._warned = False
         self._relayed_at = 0.0
+        self._connected_at = 0.0
+        self._reached: set[int] = set()
+        self._coverage: dict[str, int] = {}  # entry mac -> devices it reached
 
         self._unsub_plug_poll: CALLBACK_TYPE | None = None
         self._plugs = [d.mesh_id for d in devices if p.capabilities(d.type).kind == "plug"]
@@ -234,6 +237,7 @@ class AwoxMesh:
                         device.mac in self._silent,
                         recently_failed,
                         device.mac != self._preferred,
+                        -self._coverage.get(device.mac, len(self._devices)),
                         device.mac not in self._good,
                         -info.rssi,
                     ),
@@ -283,6 +287,8 @@ class AwoxMesh:
 
             self._warned = False
             self._relayed_at = asyncio.get_running_loop().time()
+            self._connected_at = self._relayed_at
+            self._reached = set()
             self._failed_at.pop(mac, None)
             self._good.add(mac)
             if self._baseline is None:
@@ -421,14 +427,43 @@ class AwoxMesh:
         if self.connected:
             await self._request_plugs()
 
+    def _advertising(self, mac: str) -> bool:
+        info = bluetooth.async_last_service_info(self._hass, mac, connectable=True)
+        seen = getattr(info, "time", None) if info else None
+        return seen is not None and time.monotonic() - seen <= STALE_AFTER
+
     def _check_relay(self) -> None:
-        """Drop an entry lamp that stays connected but forwards nothing from the mesh."""
-        if len(self._devices) < 2 or asyncio.get_running_loop().time() - self._relayed_at < RELAY_TIMEOUT:
-            return
+        """Replace an entry lamp that forwards nothing, or misses devices that are powered.
+
+        A device that advertises but never answers through this entry lamp is out
+        of its reach in the mesh. Every lamp is then tried once; the one reaching
+        the most devices wins (see the coverage key in _candidates).
+        """
+        now = asyncio.get_running_loop().time()
         client, mac = self._client, self._entry_mac
-        _LOGGER.info("No answer from the mesh via %s; switching entry lamp", mac)
-        self._failed_at[mac] = asyncio.get_running_loop().time()
-        self._hass.async_create_task(self._safe_disconnect(client), eager_start=False)
+        if len(self._devices) < 2 or mac is None or now - self._connected_at < RELAY_TIMEOUT:
+            return
+        if now - self._relayed_at >= RELAY_TIMEOUT:
+            _LOGGER.info("No answer from the mesh via %s; switching entry lamp", mac)
+            self._failed_at[mac] = now
+            self._hass.async_create_task(self._safe_disconnect(client), eager_start=False)
+            return
+        entry_id = self._mesh_ids.get(mac)
+        self._coverage[mac] = len(self._reached)
+        missing = [
+            d.name for d in self._devices.values()
+            if d.mesh_id != entry_id and d.mesh_id not in self._reached and self._advertising(d.mac)
+        ]
+        if not missing:
+            return
+        better = [
+            d.mac for d in self._devices.values()
+            if p.capabilities(d.type).can_connect and d.mac != mac and self._advertising(d.mac)
+            and self._coverage.get(d.mac, len(self._devices)) > self._coverage[mac]
+        ]
+        if better:
+            _LOGGER.info("%s not reachable via %s; trying another entry lamp", ", ".join(missing), mac)
+            self._hass.async_create_task(self._safe_disconnect(client), eager_start=False)
 
     async def _async_poll(self, _now: datetime) -> None:
         if self.connected:
@@ -440,6 +475,7 @@ class AwoxMesh:
         self._last_seen[mesh_id] = dt_util.utcnow()
         if mesh_id != self._mesh_ids.get(self._entry_mac or ""):
             self._relayed_at = asyncio.get_running_loop().time()
+            self._reached.add(mesh_id)
 
     # ---- receiving -----------------------------------------------------
 
