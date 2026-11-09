@@ -2,10 +2,12 @@
 
 Fast, local Home Assistant control for AwoX and EGLO Bluetooth mesh lights (EGLO connect, AwoX HomeControl / SmartLIGHT, Telink mesh based).
 
+Works with the Home Assistant Bluetooth integration, local adapters and ESPHome Bluetooth proxies. The lamps are normal `light` entities, so they can also be used in Alexa, Google Home or Apple Home via Matter (e.g. Matterbridge) or Home Assistant Cloud. Installable as a HACS custom repository.
+
 [Deutsche Anleitung](README.de.md)
 
 - Switch, dim, colour (RGB), colour temperature (2700–6500 K) and the built-in colour programs, typically in well under a second.
-- One persistent connection to the lamp with the best signal; the rest of the mesh is reached through it. If that lamp loses power, the next one takes over automatically.
+- One persistent connection to an entry lamp; the rest of the mesh is reached through it. Lamps switched off at the wall are handled automatically (see *Reliability*).
 - Lamps that are switched off at the wall show up as *unavailable* within about 2–3 minutes and come back on their own.
 - The EGLO Plug Plus appears as a switch with measured power (W), voltage (V) and energy (kWh, for the energy dashboard). It is never used as connection point, so Alexa keeps working through it.
 - Lamps get "Power (estimated)" and "Energy (estimated)": rated power × brightness + 0.4 W standby. This is an estimate, not a measurement.
@@ -42,6 +44,16 @@ If you later re-pair the lamps with a different account, Home Assistant asks you
 | Rainbow | 0 |
 | Rainbow 2 | 1 |
 | Colour program 2–6 | 2–6 |
+
+## Reliability
+
+Built for homes where some lamps are regularly switched off at the wall:
+
+- **Best entry lamp:** Home Assistant remembers how many lamps each entry lamp reaches and connects to the one that reaches the most. If the current entry lamp stops forwarding, it switches to another one within about 2½ minutes.
+- **Direct fallback:** if a lamp has power (it is advertising) but does not answer through the mesh, a command connects to that lamp directly.
+- **No flicker in Alexa / Matter:** while switching entry lamps or reconnecting (up to 20 s), lamps stay *available* and commands wait for the connection instead of failing.
+- **No ping-pong:** an entry lamp that was already tried is used again at most every 10 minutes.
+- **Collision-free status:** lamps are asked for their status one after another instead of all at once, so replies are not lost.
 
 ## How it works
 

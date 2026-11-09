@@ -2,10 +2,12 @@
 
 Schnelle, lokale Steuerung von AwoX- und EGLO-Bluetooth-Mesh-Lampen in Home Assistant (EGLO connect, AwoX HomeControl / SmartLIGHT, Telink-Mesh).
 
+Funktioniert mit der Bluetooth-Integration von Home Assistant, lokalen Adaptern und ESPHome-Bluetooth-Proxys. Die Lampen sind normale `light`-Entitäten und lassen sich damit auch in Alexa, Google Home oder Apple Home nutzen – über Matter (z. B. Matterbridge) oder Home Assistant Cloud. Installierbar als benutzerdefiniertes HACS-Repository.
+
 [English](README.md)
 
 - An/aus, Helligkeit, Farbe (RGB), Farbtemperatur (2700–6500 K) und die eingebauten Farbprogramme – meist deutlich unter einer Sekunde.
-- Eine dauerhafte Verbindung zur Lampe mit dem besten Signal; alle anderen werden über das Mesh erreicht. Verliert diese Lampe den Strom, übernimmt automatisch die nächste.
+- Eine dauerhafte Verbindung zu einer Einstiegslampe; alle anderen werden über das Mesh erreicht. Am Wandschalter ausgeschaltete Lampen werden automatisch berücksichtigt (siehe *Zuverlässigkeit*).
 - Am Wandschalter ausgeschaltete Lampen werden nach etwa 2–3 Minuten als *nicht verfügbar* angezeigt und kommen von selbst wieder.
 - Der EGLO Plug Plus erscheint als Schalter mit gemessener Leistung (W), Spannung (V) und Energie (kWh, für das Energie-Dashboard). Er wird nie als Verbindungspunkt genutzt, damit Alexa über ihn weiter funktioniert.
 - Lampen bekommen „Leistung (geschätzt)“ und „Energie (geschätzt)“: Nennleistung × Helligkeit + 0,4 W Standby. Das ist eine Schätzung, keine Messung.
@@ -42,6 +44,16 @@ Wenn du die Lampen später mit einem anderen Konto neu koppelst, fragt Home Assi
 | Regenbogen | 0 |
 | Regenbogen 2 | 1 |
 | Farbprogramm 2–6 | 2–6 |
+
+## Zuverlässigkeit
+
+Gebaut für Wohnungen, in denen einzelne Lampen oft am Wandschalter ausgeschaltet werden:
+
+- **Beste Einstiegslampe:** Home Assistant merkt sich, wie viele Lampen jede Einstiegslampe erreicht, und verbindet sich mit der, die die meisten erreicht. Leitet die aktuelle Einstiegslampe nichts mehr weiter, wechselt es innerhalb von etwa 2½ Minuten.
+- **Direkte Verbindung als Notlösung:** Hat eine Lampe Strom (sie sendet), antwortet aber nicht über das Mesh, verbindet sich ein Befehl direkt mit ihr.
+- **Kein Flackern in Alexa / Matter:** Beim Wechsel der Einstiegslampe oder Neuverbinden (bis 20 s) bleiben die Lampen *verfügbar*; Befehle warten auf die Verbindung statt zu scheitern.
+- **Kein Hin und Her:** Eine schon probierte Einstiegslampe wird höchstens alle 10 Minuten wieder genutzt.
+- **Keine Kollisionen:** Der Status wird Lampe für Lampe abgefragt statt bei allen gleichzeitig, damit keine Antworten verloren gehen.
 
 ## So funktioniert es
 

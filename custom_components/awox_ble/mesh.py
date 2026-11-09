@@ -46,6 +46,17 @@ STALE_AFTER = 20.0  # seconds without an advertisement: probably powered off
 # Connected, but no packet from any other device for this long: the entry lamp
 # has stopped relaying (seen 2026-11-08). Status poll 60 s, plug poll 15 s.
 RELAY_TIMEOUT = 150.0
+# Switching back to an entry lamp that was already tried: at most this often.
+SWITCH_INTERVAL = 600.0
+# Lamps stay available this long after the link drops; commands wait for the
+# reconnect (CONNECT_WAIT) instead of HA rejecting them as unavailable.
+RECONNECT_GRACE = 20.0
+# Status requests go to one device after the other; all at once (broadcast)
+# made the replies collide and lamps looked unreachable.
+POLL_GAP = 0.3
+# A lamp not heard via the entry lamp this long after connecting is reached by
+# connecting to it directly when a command is sent to it.
+DIRECT_AFTER = 10.0
 NEVER = datetime(1970, 1, 1, tzinfo=UTC)
 
 Connector = Callable[[BLEDevice, Callable[[BleakClient], None]], Awaitable[Any]]
@@ -108,7 +119,12 @@ class AwoxMesh:
         self._warned = False
         self._relayed_at = 0.0
         self._connected_at = 0.0
-        self._reached: set[int] = set()
+        self._last_switch: float | None = None
+        self._switching = False
+        self._target: str | None = None  # lamp to connect to next (direct command)
+        self._disconnected_at: float | None = None
+        self._grace_timer: asyncio.TimerHandle | None = None
+        self._heard_at: dict[int, float] = {}  # mesh id -> last packet via this entry lamp
         self._coverage: dict[str, int] = {}  # entry mac -> devices it reached
 
         self._unsub_plug_poll: CALLBACK_TYPE | None = None
@@ -139,6 +155,7 @@ class AwoxMesh:
             if unsub:
                 unsub()
         self._unsub_poll = self._unsub_plug_poll = None
+        self._cancel_grace_timer()
         if self._loop_task:
             self._loop_task.cancel()
             try:
@@ -172,14 +189,44 @@ class AwoxMesh:
         return lambda: self._connection_listeners.remove(cb)
 
     def is_available(self, mesh_id: int) -> bool:
-        if not self.connected:
+        if not self.connected and not self._in_grace():
             return False
         seen = self._last_seen.get(mesh_id, self._baseline)
-        return seen is not None and dt_util.utcnow() - seen < UNAVAILABLE_AFTER
+        if seen is not None and dt_util.utcnow() - seen < UNAVAILABLE_AFTER:
+            return True
+        # Silent in the mesh but powered: a command connects to it directly.
+        device = self._devices.get(mesh_id)
+        return device is not None and self._direct_possible(device)
+
+    def _direct_possible(self, device: MeshDevice) -> bool:
+        return p.capabilities(device.type).can_connect and self._advertising(device.mac)
+
+    def _out_of_reach(self, device: MeshDevice) -> bool:
+        """Powered lamp that does not answer through the current entry lamp."""
+        mac = self._entry_mac
+        if mac is None or device.mac == mac or not self._direct_possible(device):
+            return False
+        now = asyncio.get_running_loop().time()
+        heard = self._heard_at.get(device.mesh_id)
+        if heard is None:
+            return now - self._connected_at >= DIRECT_AFTER
+        return now - heard >= RELAY_TIMEOUT
+
+    def _connect_directly(self, device: MeshDevice) -> None:
+        _LOGGER.info("%s does not answer via %s; connecting to it directly", device.name, self._entry_mac)
+        client = self._client
+        self._target = device.mac
+        self._switching = True
+        self._last_switch = asyncio.get_running_loop().time()
+        self._set_disconnected()  # _write now waits for the new link
+        self._hass.async_create_task(self._safe_disconnect(client), eager_start=False)
 
     async def send(self, mesh_id: int, command: p.Command) -> None:
         """Send a command (twice); for power commands, verify via status in the background."""
         start = asyncio.get_running_loop().time()
+        device = self._devices.get(mesh_id)
+        if device is not None and self.connected and self._out_of_reach(device):
+            self._connect_directly(device)
         await self._write(mesh_id, command)
         if command[0] == p.C_POWER:
             gen = self._power_gen[mesh_id] = self._power_gen.get(mesh_id, 0) + 1
@@ -233,6 +280,7 @@ class AwoxMesh:
             found.append(
                 (
                     (
+                        device.mac != self._target,
                         stale,
                         device.mac in self._silent,
                         recently_failed,
@@ -288,7 +336,11 @@ class AwoxMesh:
             self._warned = False
             self._relayed_at = asyncio.get_running_loop().time()
             self._connected_at = self._relayed_at
-            self._reached = set()
+            self._heard_at = {}
+            self._switching = False
+            self._target = None
+            self._disconnected_at = None
+            self._cancel_grace_timer()
             self._failed_at.pop(mac, None)
             self._good.add(mac)
             if self._baseline is None:
@@ -317,7 +369,7 @@ class AwoxMesh:
     def _on_disconnect(self, client: Any) -> None:
         if client is self._client:
             _LOGGER.info("AwoX mesh connection via %s lost", self._entry_mac)
-            if self._entry_mac:
+            if self._entry_mac and not self._switching:
                 self._failed_at[self._entry_mac] = asyncio.get_running_loop().time()
                 if (lost := self._mesh_ids.get(self._entry_mac)) is not None:
                     self._mark_unavailable(lost)
@@ -329,7 +381,22 @@ class AwoxMesh:
         self._connected.clear()
         self._disconnected.set()
         if was_connected:
+            if not self._stopping:
+                self._disconnected_at = asyncio.get_running_loop().time()
+                self._cancel_grace_timer()
+                self._grace_timer = asyncio.get_running_loop().call_later(
+                    RECONNECT_GRACE, self._notify_connection
+                )
             self._notify_connection()
+
+    def _in_grace(self) -> bool:
+        since = self._disconnected_at
+        return since is not None and asyncio.get_running_loop().time() - since < RECONNECT_GRACE
+
+    def _cancel_grace_timer(self) -> None:
+        if self._grace_timer:
+            self._grace_timer.cancel()
+            self._grace_timer = None
 
     async def _safe_disconnect(self, client: Any) -> None:
         try:
@@ -409,10 +476,12 @@ class AwoxMesh:
         self._last_seen[mesh_id] = NEVER
 
     async def _request_all(self) -> None:
-        try:
-            await self._write(p.BROADCAST, p.request_status())
-        except HomeAssistantError:
-            pass
+        for mesh_id in list(self._devices):
+            try:
+                await self._write(mesh_id, p.request_status())
+            except HomeAssistantError:
+                return
+            await asyncio.sleep(POLL_GAP)
         await self._request_plugs()
 
     async def _request_plugs(self) -> None:
@@ -435,9 +504,10 @@ class AwoxMesh:
     def _check_relay(self) -> None:
         """Replace an entry lamp that forwards nothing, or misses devices that are powered.
 
-        A device that advertises but never answers through this entry lamp is out
-        of its reach in the mesh. Every lamp is then tried once; the one reaching
-        the most devices wins (see the coverage key in _candidates).
+        A device that advertises but has not answered through this entry lamp for
+        RELAY_TIMEOUT is out of its reach (seen: a lamp that relays at first and
+        later only to some devices). Every lamp is then tried once; the one
+        reaching the most devices wins (see the coverage key in _candidates).
         """
         now = asyncio.get_running_loop().time()
         client, mac = self._client, self._entry_mac
@@ -445,14 +515,14 @@ class AwoxMesh:
             return
         if now - self._relayed_at >= RELAY_TIMEOUT:
             _LOGGER.info("No answer from the mesh via %s; switching entry lamp", mac)
-            self._failed_at[mac] = now
-            self._hass.async_create_task(self._safe_disconnect(client), eager_start=False)
+            self._switch_entry(client, mac, now)
             return
         entry_id = self._mesh_ids.get(mac)
-        self._coverage[mac] = len(self._reached)
+        reached = {i for i, t in self._heard_at.items() if now - t < RELAY_TIMEOUT}
+        self._coverage[mac] = len(reached)
         missing = [
             d.name for d in self._devices.values()
-            if d.mesh_id != entry_id and d.mesh_id not in self._reached and self._advertising(d.mac)
+            if d.mesh_id != entry_id and d.mesh_id not in reached and self._advertising(d.mac)
         ]
         if not missing:
             return
@@ -461,9 +531,18 @@ class AwoxMesh:
             if p.capabilities(d.type).can_connect and d.mac != mac and self._advertising(d.mac)
             and self._coverage.get(d.mac, len(self._devices)) > self._coverage[mac]
         ]
-        if better:
+        untried = any(m not in self._coverage for m in better)
+        recently = self._last_switch is not None and now - self._last_switch < SWITCH_INTERVAL
+        if better and (untried or not recently):
             _LOGGER.info("%s not reachable via %s; trying another entry lamp", ", ".join(missing), mac)
-            self._hass.async_create_task(self._safe_disconnect(client), eager_start=False)
+            self._switch_entry(client, mac, now)
+
+    def _switch_entry(self, client: Any, mac: str, now: float) -> None:
+        """Drop the link on purpose; lamps stay available while the next one connects."""
+        self._failed_at[mac] = now  # do not come straight back to it
+        self._switching = True
+        self._last_switch = now
+        self._hass.async_create_task(self._safe_disconnect(client), eager_start=False)
 
     async def _async_poll(self, _now: datetime) -> None:
         if self.connected:
@@ -475,7 +554,7 @@ class AwoxMesh:
         self._last_seen[mesh_id] = dt_util.utcnow()
         if mesh_id != self._mesh_ids.get(self._entry_mac or ""):
             self._relayed_at = asyncio.get_running_loop().time()
-            self._reached.add(mesh_id)
+            self._heard_at[mesh_id] = self._relayed_at
 
     # ---- receiving -----------------------------------------------------
 
