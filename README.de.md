@@ -21,6 +21,8 @@ Funktioniert mit der Bluetooth-Integration von Home Assistant, lokalen Adaptern 
 
 ## Installation
 
+**Schritt-für-Schritt-Anleitung (inkl. Docker und Alexa): [INSTALL.de.md](INSTALL.de.md)**
+
 **HACS:** HACS → ⋮ → *Benutzerdefinierte Repositories* → dieses Repository als *Integration* hinzufügen → *AvoX K1NG Dev* installieren → Home Assistant neu starten.
 
 **Manuell:** `custom_components/awox_ble` in deinen Ordner `config/custom_components/` kopieren und Home Assistant neu starten.
